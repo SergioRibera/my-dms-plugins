@@ -1,0 +1,15 @@
+{
+    "id": "dankFerricast",
+    "name": "Ferricast",
+    "description": "Cast screen or window to network receivers (Chromecast, Miracast) via the Ferricast daemon.",
+    "version": "0.1.0",
+    "license": "MIT",
+    "author": "Sergio Ribera",
+    "icon": "cast",
+    "component": "./DankFerricast.qml",
+    "capabilities": ["control-center"],
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
+}
