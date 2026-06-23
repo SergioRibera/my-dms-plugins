@@ -10,6 +10,6 @@
     "settings": "./AnsyncSettings.qml",
     "icon": "smartphone",
     "requires_dms": ">=0.1.0",
-    "requires": ["busctl", "gdbus", "adb"],
+    "requires": ["busctl"],
     "permissions": ["settings_read", "settings_write", "process"]
 }
