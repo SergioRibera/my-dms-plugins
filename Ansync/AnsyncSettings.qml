@@ -60,14 +60,6 @@ PluginSettings {
         defaultValue: "2000"
     }
 
-    StringSetting {
-        settingKey: "ansyncctlPath"
-        label: "ansyncctl path"
-        description: "Override if ansyncctl is not in PATH."
-        placeholder: "ansyncctl"
-        defaultValue: "ansyncctl"
-    }
-
     StyledText {
         width: parent.width
         text: "Notifications"

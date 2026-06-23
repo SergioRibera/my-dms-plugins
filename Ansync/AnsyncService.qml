@@ -9,7 +9,6 @@ import qs.Services
 Singleton {
     id: svc
 
-    property string ansyncctlPath: "ansyncctl"
     property int pollIntervalMs: 2000
     property bool notificationBridge: false
 
@@ -25,7 +24,6 @@ Singleton {
     //   { deviceId: { mirror, mic, camera, audio } }
     property var streams: ({})
 
-    signal pairFinished(bool ok, string message)
     signal adbDevicesListed(var serials)
 
     // Wi-Fi PIN pair surface (the new D-Bus flow). All callers
@@ -408,36 +406,77 @@ Singleton {
             }, 0)
     }
 
+    /// Ask the daemon for its ADB device list. Pure-Rust passthrough
+    /// inside the daemon (`Manager.ListAdbDevices`) — the plugin
+    /// no longer shells out to the `adb` CLI. Emits `adbDevicesListed`
+    /// with a `[serial]` array (state filter is server-side, only
+    /// authorized devices come back).
     function listAdbDevices() {
-        Proc.runCommand("ansync.adb.list", ["adb", "devices"],
+        Proc.runCommand("ansync.adb.list",
+            ["busctl","--user","--json=short","call",busName,
+             managerPath, managerIface, "ListAdbDevices"],
             (out, code) => {
                 if (code !== 0) {
                     svc.adbDevicesListed([])
                     return
                 }
-                const serials = []
-                const lines = out.split("\n")
-                for (let i = 1; i < lines.length; ++i) {
-                    const parts = lines[i].trim().split(/\s+/)
-                    if (parts.length >= 2 && parts[1] === "device") {
-                        serials.push(parts[0])
-                    }
+                try {
+                    const parsed = JSON.parse(out)
+                    const arr = parsed.data[0] || []
+                    svc.adbDevicesListed(arr.map(t => t[0]))
+                } catch (e) {
+                    svc.lastError = "ListAdbDevices parse: " + e
+                    svc.adbDevicesListed([])
                 }
-                svc.adbDevicesListed(serials)
             }, 0)
     }
 
-    function pair(serial, displayName) {
-        const cmd = [ansyncctlPath, "pair"]
-        if (serial && serial.length > 0) { cmd.push("--serial"); cmd.push(serial) }
-        if (displayName && displayName.length > 0) {
-            cmd.push("--name"); cmd.push(displayName)
-        }
+    /// Kick off a cable pair against the supplied serial. Drives the
+    /// daemon's `Manager.PairOverCable`, which owns the APK install +
+    /// `am broadcast` + bootstrap. Emits `wifiPair*` signals through
+    /// the shared `PairingSession` machinery — the cable flow never
+    /// hits `awaiting_pin`, so the PIN modal stays dormant.
+    function pair(serial) {
         Proc.runCommand("ansync.pair." + Date.now(),
-            ["sh", "-c", cmd.map(a => "'" + a.replace(/'/g, "'\\''") + "'").join(" ") + " 2>&1"],
+            ["busctl","--user","--json=short","call",busName,
+             managerPath, managerIface, "PairOverCable", "ss", serial, ""],
             (out, code) => {
-                svc.pairFinished(code === 0, out)
-                if (code === 0) svc.refreshPeers()
+                if (code !== 0) {
+                    svc.wifiPairFailed("PairOverCable exit=" + code)
+                    return
+                }
+                try {
+                    const parsed = JSON.parse(out)
+                    const path = parsed.data[0]
+                    svc.wifiPairStarted(path)
+                    svc._pollPairSession(path)
+                } catch (e) {
+                    svc.wifiPairFailed("PairOverCable parse: " + e)
+                }
+            }, 0)
+    }
+
+    /// Transport-auto pair. Daemon probes ADB; falls back to mDNS.
+    /// One D-Bus call covers both cases — UI subscribes via the same
+    /// `wifiPair*` signal surface as `pair`.
+    function pairAuto(seconds) {
+        const secs = String(seconds || 5)
+        Proc.runCommand("ansync.pairauto." + Date.now(),
+            ["busctl","--user","--json=short","call",busName,
+             managerPath, managerIface, "PairAuto", "us", secs, ""],
+            (out, code) => {
+                if (code !== 0) {
+                    svc.wifiPairFailed("PairAuto exit=" + code)
+                    return
+                }
+                try {
+                    const parsed = JSON.parse(out)
+                    const path = parsed.data[0]
+                    svc.wifiPairStarted(path)
+                    svc._pollPairSession(path)
+                } catch (e) {
+                    svc.wifiPairFailed("PairAuto parse: " + e)
+                }
             }, 0)
     }
 

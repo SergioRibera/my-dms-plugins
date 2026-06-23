@@ -24,19 +24,16 @@ PluginComponent {
     readonly property bool cameraStabilization: pluginData.cameraStabilization === true
     readonly property string quickMicDirection: pluginData.quickMicDirection || "device-to-host"
     readonly property int pollIntervalMs: parseInt(pluginData.pollIntervalMs || "2000")
-    readonly property string ansyncctlPath: pluginData.ansyncctlPath || "ansyncctl"
 
     readonly property var svc: AnsyncService
 
     Component.onCompleted: {
-        AnsyncService.ansyncctlPath = root.ansyncctlPath
         AnsyncService.pollIntervalMs = root.pollIntervalMs
         AnsyncService.notificationBridge = root.notificationBridge
     }
 
     Connections {
         target: root
-        function onAnsyncctlPathChanged()      { AnsyncService.ansyncctlPath = root.ansyncctlPath }
         function onPollIntervalMsChanged()     { AnsyncService.pollIntervalMs = root.pollIntervalMs }
         function onNotificationBridgeChanged() { AnsyncService.notificationBridge = root.notificationBridge }
     }
@@ -187,7 +184,6 @@ PluginComponent {
             property string popoutState: "list"
             property var pairSerials: []
             property string pairSelected: ""
-            property string pairName: ""
             property string forgetTargetId: ""
             property string forgetTargetName: ""
 
@@ -249,13 +245,6 @@ PluginComponent {
                             root.svc.browseAvailable(5)
                         }
                     }
-                }
-                function onPairFinished(ok, message) {
-                    if (typeof ToastService !== "undefined") {
-                        ok ? ToastService.showInfo("Ansync", "Paired successfully")
-                           : ToastService.showError("Ansync", "Pair failed: " + message.substring(0, 80))
-                    }
-                    if (ok) pop.popoutState = "list"
                 }
                 function onWifiCandidatesFound(list) {
                     pop.wifiCandidates = list
@@ -334,7 +323,6 @@ PluginComponent {
                             // PairingSession).
                             onClicked: {
                                 pop.pairSelected = ""
-                                pop.pairName = ""
                                 pop.pairSerials = []
                                 pop.wifiCandidates = []
                                 pop.wifiSelectedAddr = ""
@@ -714,13 +702,6 @@ PluginComponent {
                         }
                     }
 
-                    DankTextField {
-                        width: parent.width
-                        placeholderText: "Display name (optional)"
-                        text: pop.pairName
-                        onTextEdited: pop.pairName = text
-                    }
-
                     Row {
                         spacing: Theme.spacingS
                         anchors.right: parent.right
@@ -769,7 +750,7 @@ PluginComponent {
                                 hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 enabled: pop.pairSelected.length > 0
                                 onClicked: {
-                                    root.svc.pair(pop.pairSelected, pop.pairName)
+                                    root.svc.pair(pop.pairSelected)
                                     if (typeof ToastService !== "undefined") {
                                         ToastService.showInfo("Ansync", "Pairing " + pop.pairSelected + "…")
                                     }
