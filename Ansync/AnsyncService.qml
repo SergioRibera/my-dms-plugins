@@ -495,7 +495,12 @@ Singleton {
         const sr = line.match(svc._streamRe)
         if (sr) {
             const id = sr[1].split("/").pop()
-            svc._setStream(id, sr[2], sr[3] === "true")
+            // Daemon emits `screen` for the mirror tile; the local
+            // stream cache keys the toggle off `mirror` (the user-facing
+            // label). Translate so signal-driven updates land on the
+            // same key the UI is reading.
+            const kind = sr[2] === "screen" ? "mirror" : sr[2]
+            svc._setStream(id, kind, sr[3] === "true")
             return
         }
         const pc = line.match(svc._pairCompletedRe)

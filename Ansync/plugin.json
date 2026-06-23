@@ -1,7 +1,7 @@
 {
     "id": "ansync",
     "name": "Ansync",
-    "description": "Android companion: mirror screen, sync clipboard, route audio, FUSE mount, and forward notifications.",
+    "description": "Android companion: mirror screen, sync clipboard, route audio, share files/URLs, virtual camera/mic, and forward notifications.",
     "version": "0.1.0",
     "author": "Sergio Ribera",
     "type": "widget",

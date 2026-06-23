@@ -70,20 +70,20 @@ PluginComponent {
         "audio_in": {icon: "headphones", label: "Audio in"},
         "audio_out": {icon: "speaker", label: "Audio out"},
         "files": {icon: "folder", label: "Files"},
-        "files_mount": {icon: "drive_file_move", label: "FUSE mount"},
+        "clipboard": {icon: "content_paste", label: "Clipboard"},
+        "share": {icon: "share", label: "Quick share"},
         "input_from_device": {icon: "touch_app", label: "Input from device"},
         "input_to_device": {icon: "ads_click", label: "Input to device"},
         "notifications": {icon: "notifications", label: "Notifications"},
-        "sensors": {icon: "sensors", label: "Sensors"},
         "stylus": {icon: "edit", label: "Stylus"},
         "hevc": {icon: "hd", label: "HEVC"}
     })
 
     readonly property var allPermFlags: [
         "screen_mirror", "camera_video", "camera_audio", "mic",
-        "audio_in", "audio_out", "files_send", "files_receive", "files_mount",
+        "audio_in", "audio_out", "files_send", "files_receive",
         "clipboard_in", "clipboard_out", "input_from_device", "input_to_device",
-        "notifications", "sensors"
+        "notifications", "share_receive"
     ]
 
     ccWidgetIcon: liveCount > 0 ? "smartphone"
