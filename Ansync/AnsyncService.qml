@@ -221,10 +221,6 @@ Singleton {
         _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"HideScreen"],
                 "HideScreen")
     }
-    function syncClipboard(id) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"SyncClipboard"],
-                "SyncClipboard")
-    }
     function startMic(id) {
         _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"StartMicrophone"],
                 "StartMicrophone")

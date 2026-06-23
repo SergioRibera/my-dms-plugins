@@ -70,7 +70,6 @@ PluginComponent {
         "audio_in": {icon: "headphones", label: "Audio in"},
         "audio_out": {icon: "speaker", label: "Audio out"},
         "files": {icon: "folder", label: "Files"},
-        "clipboard": {icon: "content_paste", label: "Clipboard"},
         "share": {icon: "share", label: "Quick share"},
         "input_from_device": {icon: "touch_app", label: "Input from device"},
         "input_to_device": {icon: "ads_click", label: "Input to device"},
