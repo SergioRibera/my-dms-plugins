@@ -1,0 +1,14 @@
+{
+    "id": "bluetoothBatteryBadges",
+    "name": "Bluetooth Battery Badges",
+    "description": "Battery badges for connected Bluetooth devices with per-type icons (gamepad, headset, mouse, keyboard, ...).",
+    "version": "1.0.0",
+    "author": "DMS",
+    "type": "widget",
+    "capabilities": ["dankbar-widget", "bluetooth-monitoring"],
+    "component": "./BluetoothBatteryBadgesWidget.qml",
+    "settings": "./BluetoothBatteryBadgesSettings.qml",
+    "icon": "bluetooth",
+    "requires_dms": ">=0.1.0",
+    "permissions": ["settings_read", "settings_write"]
+}
