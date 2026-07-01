@@ -16,11 +16,11 @@ Singleton {
     property bool daemonAvailable: false
     property string lastError: ""
 
-    // Per-device per-stream local activity cache. The daemon doesn't
-    // (yet) emit per-stream signals so we optimistically flip these
-    // bits on user action and reset on device-offline. Stale state is
-    // recoverable: user clicks the toggle again and the daemon's
-    // ShowScreen / HideScreen are both idempotent.
+    // Per-device per-stream local activity cache. Only `audio` (PC → phone
+    // sink) is user-triggered from here; the other three are surfaced
+    // read-only because the phone owns their trigger (QSTiles). We still
+    // track them so the UI can show a live/idle badge — the daemon emits
+    // `StreamStateChanged` for `screen` / `mic` / `camera` / `audio`.
     //   { deviceId: { mirror, mic, camera, audio } }
     property var streams: ({})
 
@@ -211,42 +211,30 @@ Singleton {
             }, 0)
     }
 
-    function showScreen(id) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"ShowScreen"],
-                "ShowScreen")
+    // ─────────────────── host-initiated actions ────────────────────
+    //
+    // Sender-initiates rule: the PC only triggers streams whose data it
+    // sources. Screen mirror / mic share / camera live entirely behind
+    // the phone's QSTiles — no `ShowScreen`, `StartMicrophone` or
+    // `StartCamera` D-Bus surface anymore. The one exception is the
+    // PC → phone audio route (audio sink), which the host publishes.
+
+    function startAudioSink(id) {
+        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"StartAudioSink"],
+                "StartAudioSink")
     }
-    function hideScreen(id) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"HideScreen"],
-                "HideScreen")
+    function stopAudioSink(id) {
+        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"StopAudioSink"],
+                "StopAudioSink")
     }
-    function startMic(id) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"StartMicrophone"],
-                "StartMicrophone")
+    function toggleAudioSink(id) {
+        if (svc.isStreamOn(id, "audio")) {
+            svc.stopAudioSink(id); svc._setStream(id, "audio", false)
+        } else {
+            svc.startAudioSink(id); svc._setStream(id, "audio", true)
+        }
     }
-    function stopMic(id) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"StopMicrophone"],
-                "StopMicrophone")
-    }
-    function startAudio(id, direction) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,
-                 "StartAudioRoute","s",direction], "StartAudioRoute")
-    }
-    function stopAudio(id) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"StopAudioRoute"],
-                "StopAudioRoute")
-    }
-    function startCamera(id, cfg) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,
-                 "StartCamera","suuyussb",
-                 String(cfg.cameraId), String(cfg.width), String(cfg.height),
-                 String(cfg.fps), String(cfg.bitrateKbps),
-                 cfg.codec, cfg.aspect, cfg.stabilization ? "true" : "false"],
-                "StartCamera")
-    }
-    function stopCamera(id) {
-        _busctl(["busctl","--user","call",busName,devicePath(id),deviceIface,"StopCamera"],
-                "StopCamera")
-    }
+
     function forget(id) {
         _busctl(["busctl","--user","call",busName,managerPath,managerIface,
                  "ForgetDevice","s",id], "ForgetDevice")
@@ -254,40 +242,6 @@ Singleton {
     function refreshPeers() {
         _busctl(["busctl","--user","call",busName,managerPath,managerIface,"RefreshPeers"],
                 "RefreshPeers")
-    }
-
-    // ────────────────────────── stream toggles ──────────────────────────
-
-    function toggleScreen(id) {
-        if (svc.isStreamOn(id, "mirror")) {
-            svc.hideScreen(id); svc._setStream(id, "mirror", false)
-        } else {
-            svc.showScreen(id); svc._setStream(id, "mirror", true)
-        }
-    }
-
-    function toggleMic(id) {
-        if (svc.isStreamOn(id, "mic")) {
-            svc.stopMic(id); svc._setStream(id, "mic", false)
-        } else {
-            svc.startMic(id); svc._setStream(id, "mic", true)
-        }
-    }
-
-    function toggleCamera(id, cfg) {
-        if (svc.isStreamOn(id, "camera")) {
-            svc.stopCamera(id); svc._setStream(id, "camera", false)
-        } else {
-            svc.startCamera(id, cfg); svc._setStream(id, "camera", true)
-        }
-    }
-
-    function toggleAudio(id, direction) {
-        if (svc.isStreamOn(id, "audio")) {
-            svc.stopAudio(id); svc._setStream(id, "audio", false)
-        } else {
-            svc.startAudio(id, direction); svc._setStream(id, "audio", true)
-        }
     }
 
     // ────────────────────────── Wi-Fi PIN pair ──────────────────────────

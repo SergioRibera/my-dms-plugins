@@ -15,14 +15,6 @@ PluginComponent {
     readonly property bool hideWhenEmpty: pluginData.hideWhenEmpty !== undefined ? pluginData.hideWhenEmpty : false
     readonly property bool notificationBridge: pluginData.notificationBridge === true
     readonly property bool confirmForget: pluginData.confirmForget !== undefined ? pluginData.confirmForget : true
-    readonly property string defaultCameraId: pluginData.defaultCameraId || "0"
-    readonly property string cameraResolution: pluginData.cameraResolution || "1920x1080"
-    readonly property int cameraFps: parseInt(pluginData.cameraFps || "60")
-    readonly property string cameraCodec: pluginData.cameraCodec || "h264"
-    readonly property string cameraAspect: pluginData.cameraAspect || "crop"
-    readonly property int cameraBitrateKbps: parseInt(pluginData.cameraBitrateKbps || "8000")
-    readonly property bool cameraStabilization: pluginData.cameraStabilization === true
-    readonly property string quickMicDirection: pluginData.quickMicDirection || "device-to-host"
     readonly property int pollIntervalMs: parseInt(pluginData.pollIntervalMs || "2000")
 
     readonly property var svc: AnsyncService
@@ -64,10 +56,12 @@ PluginComponent {
         "camera_video": {icon: "videocam", label: "Camera video"},
         "camera_audio": {icon: "mic_external_on", label: "Camera audio"},
         "mic": {icon: "mic", label: "Microphone"},
-        "audio_in": {icon: "headphones", label: "Audio in"},
-        "audio_out": {icon: "speaker", label: "Audio out"},
+        "audio_in": {icon: "headphones", label: "Mic share (device → host)"},
+        "audio_out": {icon: "speaker", label: "PC audio (host → device)"},
         "files": {icon: "folder", label: "Files"},
         "share": {icon: "share", label: "Quick share"},
+        "clipboard_in": {icon: "content_paste", label: "Clipboard in"},
+        "clipboard_out": {icon: "content_paste_go", label: "Clipboard out"},
         "input_from_device": {icon: "touch_app", label: "Input from device"},
         "input_to_device": {icon: "ads_click", label: "Input to device"},
         "notifications": {icon: "notifications", label: "Notifications"},
@@ -96,9 +90,11 @@ PluginComponent {
     ccWidgetIsActive: liveCount > 0
 
     onCcWidgetToggled: {
+        // With sender-initiates, the only PC-owned action per device is
+        // the audio sink toggle — apply it to a lone live device.
         if (deviceCount === 1) {
             const d = svc.devices[0]
-            if (d.live) svc.toggleScreen(d.id)
+            if (d.live) svc.toggleAudioSink(d.id)
         }
     }
 
@@ -167,7 +163,6 @@ PluginComponent {
                        : pop.popoutState === "wifiPair" ? "Pair over Wi-Fi"
                        : pop.popoutState === "wifiPin" ? "Enter PIN"
                        : pop.popoutState === "forget" ? "Forget device?"
-                       : pop.popoutState === "camera" ? "Start camera"
                        : "Ansync"
             detailsText: pop.popoutState !== "list" ? ""
                 : !root.svc.daemonAvailable
@@ -196,34 +191,6 @@ PluginComponent {
             property string wifiPin: ""
             property string wifiStatus: ""    // user-visible status text
             property bool   wifiBrowsing: false
-
-            // Camera-start popup state. `cameraTargetId` is the device
-            // the next StartCamera will hit. The other fields seed
-            // from the plugin's saved defaults when the popup opens
-            // (see `openCameraPopup`) so the user can tweak only what
-            // changes per session.
-            property string cameraTargetId: ""
-            property string cameraTargetName: ""
-            property string cameraSelId: "0"
-            property string cameraSelResolution: "1920x1080"
-            property int    cameraSelFps: 60
-            property string cameraSelCodec: "h264"
-            property string cameraSelAspect: "crop"
-            property bool   cameraSelStab: false
-            property int    cameraSelBitrate: 8000
-
-            function openCameraPopup(id, name) {
-                pop.cameraTargetId = id
-                pop.cameraTargetName = name || ""
-                pop.cameraSelId = root.defaultCameraId
-                pop.cameraSelResolution = root.cameraResolution
-                pop.cameraSelFps = root.cameraFps
-                pop.cameraSelCodec = root.cameraCodec
-                pop.cameraSelAspect = root.cameraAspect
-                pop.cameraSelStab = root.cameraStabilization
-                pop.cameraSelBitrate = root.cameraBitrateKbps
-                pop.popoutState = "camera"
-            }
 
             Connections {
                 target: root.svc
@@ -416,76 +383,61 @@ PluginComponent {
                                     spacing: Theme.spacingXS
 
                                     Repeater {
-                                        // Toggle-style action grid. Each entry's `on`
-                                        // bit comes straight from the service's local
-                                        // stream cache (`root.svc.streams`), so the
-                                        // same icon switches between activate / stop
-                                        // representations and dispatches the
-                                        // corresponding D-Bus call. Stale state
-                                        // (Android-side cap died without telling us)
-                                        // self-corrects on the next click.
+                                        // Sender-initiates action row. Screen mirror /
+                                        // mic share / camera are triggered from the
+                                        // phone's QSTiles (privacy invariant) so we
+                                        // surface them as read-only status pills — the
+                                        // `on` bit is driven by the daemon's
+                                        // `StreamStateChanged` signal, no click action.
+                                        // Only the PC → phone audio sink is toggled
+                                        // from here.
                                         model: [
-                                            // Per-action buttons stay clickable regardless
-                                            // of the live/pending semaphore: the daemon
-                                            // is idempotent and either fires the action
-                                            // or logs "no live connection" without
-                                            // crashing. Greying buttons out led to user
-                                            // confusion ("did you remove them?") whenever
-                                            // a freshly paired peer was still mid-Hello.
                                             {
-                                                iconOff: "screen_share", iconOn: "stop_screen_share",
-                                                labelOff: "Mirror (tap to grant on phone)",
-                                                labelOn: "Stop mirror",
+                                                iconOff: "screen_share", iconOn: "screen_share",
+                                                labelOff: "Mirror (start from phone tile)",
+                                                labelOn: "Mirror live",
                                                 on: root.svc.isStreamOn(deviceRow.device.id, "mirror"),
-                                                action: () => root.svc.toggleScreen(deviceRow.device.id),
-                                                enabled: true
+                                                interactive: false,
+                                                action: () => {}
                                             },
                                             {
-                                                iconOff: "mic", iconOn: "mic_off",
-                                                labelOff: "Start mic share", labelOn: "Stop mic share",
+                                                iconOff: "mic", iconOn: "mic",
+                                                labelOff: "Mic share (start from phone tile)",
+                                                labelOn: "Mic share live",
                                                 on: root.svc.isStreamOn(deviceRow.device.id, "mic"),
-                                                action: () => root.svc.toggleMic(deviceRow.device.id),
-                                                enabled: true
+                                                interactive: false,
+                                                action: () => {}
                                             },
                                             {
-                                                iconOff: "videocam", iconOn: "videocam_off",
-                                                labelOff: "Start camera", labelOn: "Stop camera",
+                                                iconOff: "videocam", iconOn: "videocam",
+                                                labelOff: "Camera (start from phone tile)",
+                                                labelOn: "Camera live",
                                                 on: root.svc.isStreamOn(deviceRow.device.id, "camera"),
-                                                // Stop is a direct call — no choices to make. Start
-                                                // pops the config picker so the user picks lens /
-                                                // resolution / codec per session; the plugin
-                                                // defaults seed the initial values.
-                                                action: () => {
-                                                    if (root.svc.isStreamOn(deviceRow.device.id, "camera")) {
-                                                        root.svc.stopCamera(deviceRow.device.id)
-                                                        root.svc._setStream(deviceRow.device.id, "camera", false)
-                                                    } else {
-                                                        pop.openCameraPopup(
-                                                            deviceRow.device.id,
-                                                            deviceRow.device.name || "")
-                                                    }
-                                                },
-                                                enabled: true
+                                                interactive: false,
+                                                action: () => {}
                                             },
                                             {
+                                                // PC audio sink: host → device. Host-initiated,
+                                                // toggled from here.
                                                 iconOff: "volume_up", iconOn: "volume_off",
-                                                labelOff: "Start audio route", labelOn: "Stop audio route",
+                                                labelOff: "Play PC audio on phone",
+                                                labelOn: "Stop PC audio",
                                                 on: root.svc.isStreamOn(deviceRow.device.id, "audio"),
-                                                action: () => root.svc.toggleAudio(
-                                                    deviceRow.device.id, root.quickMicDirection),
-                                                enabled: true
+                                                interactive: true,
+                                                action: () => root.svc.toggleAudioSink(deviceRow.device.id)
                                             },
                                             {
                                                 iconOff: "tune", iconOn: "tune",
                                                 labelOff: "Permissions", labelOn: "Permissions",
                                                 on: deviceRow.expanded,
-                                                action: () => deviceRow.expanded = !deviceRow.expanded,
-                                                enabled: true
+                                                interactive: true,
+                                                action: () => deviceRow.expanded = !deviceRow.expanded
                                             },
                                             {
                                                 iconOff: "delete", iconOn: "delete",
                                                 labelOff: "Forget", labelOn: "Forget",
                                                 on: false,
+                                                interactive: true,
                                                 action: () => {
                                                     if (root.confirmForget) {
                                                         pop.forgetTargetId = deviceRow.device.id
@@ -494,8 +446,7 @@ PluginComponent {
                                                     } else {
                                                         root.svc.forget(deviceRow.device.id)
                                                     }
-                                                },
-                                                enabled: true
+                                                }
                                             }
                                         ]
 
@@ -504,9 +455,14 @@ PluginComponent {
                                             radius: Theme.cornerRadius
                                             color: modelData.on
                                                 ? Theme.primaryContainer
-                                                : (actionArea.containsMouse && modelData.enabled
+                                                : (actionArea.containsMouse && modelData.interactive
                                                        ? Theme.surfaceContainerHighest : "transparent")
-                                            opacity: modelData.enabled ? 1.0 : 0.4
+                                            // Non-interactive pills read as "status".
+                                            // Dim them slightly when off so the user's
+                                            // eye still gets the on/off contrast.
+                                            opacity: modelData.interactive
+                                                ? 1.0
+                                                : (modelData.on ? 1.0 : 0.55)
 
                                             DankIcon {
                                                 anchors.centerIn: parent
@@ -519,12 +475,15 @@ PluginComponent {
                                                 id: actionArea
                                                 anchors.fill: parent
                                                 hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                enabled: modelData.enabled
+                                                cursorShape: modelData.interactive
+                                                    ? Qt.PointingHandCursor
+                                                    : Qt.ArrowCursor
                                                 ToolTip.text: modelData.on ? modelData.labelOn : modelData.labelOff
                                                 ToolTip.visible: containsMouse
                                                 ToolTip.delay: 400
-                                                onClicked: modelData.action()
+                                                onClicked: {
+                                                    if (modelData.interactive) modelData.action()
+                                                }
                                             }
                                         }
                                     }
@@ -1005,231 +964,6 @@ PluginComponent {
                         }
                     }
                 }
-
-                Column {
-                    id: camCol
-                    width: parent.width
-                    spacing: Theme.spacingS
-                    visible: pop.popoutState === "camera"
-
-                            StyledText {
-                                width: parent.width
-                                text: pop.cameraTargetName.length > 0
-                                    ? pop.cameraTargetName
-                                    : "Camera configuration"
-                                color: Theme.surfaceVariantText
-                                font.pixelSize: Theme.fontSizeSmall
-                                wrapMode: Text.WordWrap
-                            }
-
-                            Row {
-                                width: parent.width
-                                spacing: Theme.spacingM
-                                StyledText {
-                                    width: 90
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Lens"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                }
-                                DankDropdown {
-                                    width: parent.width - 90 - Theme.spacingM
-                                    height: 36
-                                    text: ""
-                                    currentValue: pop.cameraSelId === "0" ? "Back (0)"
-                                                : pop.cameraSelId === "1" ? "Front (1)"
-                                                : pop.cameraSelId
-                                    options: ["Back (0)", "Front (1)"]
-                                    onValueChanged: function(v) {
-                                        pop.cameraSelId = v === "Back (0)" ? "0"
-                                                        : v === "Front (1)" ? "1"
-                                                        : v
-                                    }
-                                }
-                            }
-
-                            Row {
-                                width: parent.width
-                                spacing: Theme.spacingM
-                                StyledText {
-                                    width: 90
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Resolution"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                }
-                                DankDropdown {
-                                    width: parent.width - 90 - Theme.spacingM
-                                    height: 36
-                                    text: ""
-                                    currentValue: pop.cameraSelResolution
-                                    options: ["1920x1080", "1280x720", "1280x960", "640x480", "3840x2160"]
-                                    onValueChanged: function(v) { pop.cameraSelResolution = v }
-                                }
-                            }
-
-                            Row {
-                                width: parent.width
-                                spacing: Theme.spacingM
-                                StyledText {
-                                    width: 90
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Frame rate"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                }
-                                DankDropdown {
-                                    width: parent.width - 90 - Theme.spacingM
-                                    height: 36
-                                    text: ""
-                                    currentValue: String(pop.cameraSelFps)
-                                    options: ["15", "24", "30", "60"]
-                                    onValueChanged: function(v) { pop.cameraSelFps = parseInt(v) }
-                                }
-                            }
-
-                            Row {
-                                width: parent.width
-                                spacing: Theme.spacingM
-                                StyledText {
-                                    width: 90
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Codec"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                }
-                                DankDropdown {
-                                    width: parent.width - 90 - Theme.spacingM
-                                    height: 36
-                                    text: ""
-                                    currentValue: pop.cameraSelCodec
-                                    options: ["h264", "h265"]
-                                    onValueChanged: function(v) { pop.cameraSelCodec = v }
-                                }
-                            }
-
-                            Row {
-                                width: parent.width
-                                spacing: Theme.spacingM
-                                StyledText {
-                                    width: 90
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Aspect"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                }
-                                DankDropdown {
-                                    width: parent.width - 90 - Theme.spacingM
-                                    height: 36
-                                    text: ""
-                                    currentValue: pop.cameraSelAspect
-                                    options: ["crop", "letterbox", "stretch"]
-                                    onValueChanged: function(v) { pop.cameraSelAspect = v }
-                                }
-                            }
-
-                            Row {
-                                width: parent.width
-                                spacing: Theme.spacingM
-                                StyledText {
-                                    width: 90
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Bitrate (k)"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                }
-                                DankTextField {
-                                    width: parent.width - 90 - Theme.spacingM
-                                    placeholderText: "8000"
-                                    text: String(pop.cameraSelBitrate)
-                                    onTextEdited: {
-                                        const n = parseInt(text)
-                                        if (!isNaN(n) && n > 0) pop.cameraSelBitrate = n
-                                    }
-                                }
-                            }
-
-                            Row {
-                                width: parent.width
-                                spacing: Theme.spacingM
-                                StyledText {
-                                    width: 90
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Stabilize"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                }
-                                StyledRect {
-                                    width: 80; height: 28; radius: Theme.cornerRadius
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    color: pop.cameraSelStab
-                                        ? (stabArea.containsMouse ? Theme.primaryHover : Theme.primary)
-                                        : (stabArea.containsMouse ? Theme.surfaceContainerHighest
-                                                                  : Theme.surfaceContainerHigh)
-                                    StyledText {
-                                        anchors.centerIn: parent
-                                        text: pop.cameraSelStab ? "On" : "Off"
-                                        color: pop.cameraSelStab ? Theme.primaryText : Theme.surfaceText
-                                        font.pixelSize: Theme.fontSizeSmall
-                                    }
-                                    MouseArea {
-                                        id: stabArea; anchors.fill: parent
-                                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                        onClicked: pop.cameraSelStab = !pop.cameraSelStab
-                                    }
-                                }
-                            }
-
-                            Item { width: parent.width; height: Theme.spacingS }
-
-                            Row {
-                                spacing: Theme.spacingS
-                                anchors.right: parent.right
-
-                                StyledRect {
-                                    width: 80; height: 32; radius: Theme.cornerRadius
-                                    color: camCancelArea.containsMouse ? Theme.surfaceContainerHighest
-                                                                        : Theme.surfaceContainerHigh
-                                    StyledText {
-                                        anchors.centerIn: parent; text: "Cancel"
-                                        color: Theme.surfaceText; font.pixelSize: Theme.fontSizeSmall
-                                    }
-                                    MouseArea {
-                                        id: camCancelArea; anchors.fill: parent
-                                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                        onClicked: pop.popoutState = "list"
-                                    }
-                                }
-
-                                StyledRect {
-                                    width: 110; height: 32; radius: Theme.cornerRadius
-                                    color: camStartArea.containsMouse ? Theme.primaryHover : Theme.primary
-                                    StyledText {
-                                        anchors.centerIn: parent; text: "Start camera"
-                                        color: Theme.primaryText; font.pixelSize: Theme.fontSizeSmall
-                                        font.weight: Font.Medium
-                                    }
-                                    MouseArea {
-                                        id: camStartArea; anchors.fill: parent
-                                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            const parts = pop.cameraSelResolution.split("x")
-                                            root.svc.toggleCamera(pop.cameraTargetId, {
-                                                cameraId: pop.cameraSelId,
-                                                width: parseInt(parts[0]),
-                                                height: parseInt(parts[1]),
-                                                fps: pop.cameraSelFps,
-                                                bitrateKbps: pop.cameraSelBitrate,
-                                                codec: pop.cameraSelCodec,
-                                                aspect: pop.cameraSelAspect,
-                                                stabilization: pop.cameraSelStab
-                                            })
-                                            pop.popoutState = "list"
-                                        }
-                                    }
-                                }
-                            }
-                        }
             }
         }
 

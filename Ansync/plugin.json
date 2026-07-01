@@ -1,8 +1,8 @@
 {
     "id": "ansync",
     "name": "Ansync",
-    "description": "Android companion: mirror screen, sync clipboard, route audio, share files/URLs, virtual camera/mic, and forward notifications.",
-    "version": "0.1.0",
+    "description": "Android companion: state, PC audio route, clipboard, files.",
+    "version": "0.3.0",
     "author": "Sergio Ribera",
     "type": "widget",
     "capabilities": ["dankbar-widget", "control-center", "android-mirror"],
