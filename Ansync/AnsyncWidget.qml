@@ -350,8 +350,15 @@ PluginComponent {
                                             width: parent.width
                                         }
                                         StyledText {
-                                            text: root.svc.stateLabel(deviceRow.device.state) +
-                                                  (deviceRow.device.address ? " • " + deviceRow.device.address : "")
+                                            text: {
+                                                let s = root.svc.stateLabel(deviceRow.device.state)
+                                                const ms = deviceRow.device.latencyMs || 0
+                                                if (deviceRow.device.live && ms > 0)
+                                                    s += " • " + ms + " ms"
+                                                if (deviceRow.device.address)
+                                                    s += " • " + deviceRow.device.address
+                                                return s
+                                            }
                                             color: root.stateColor(deviceRow.device.state)
                                             font.pixelSize: Theme.fontSizeSmall
                                             elide: Text.ElideRight
@@ -997,7 +1004,13 @@ PluginComponent {
                         }
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.name + " — " + root.svc.stateLabel(modelData.state)
+                            text: {
+                                let s = modelData.name + " — " + root.svc.stateLabel(modelData.state)
+                                const ms = modelData.latencyMs || 0
+                                if (root.svc.isLive(modelData.state) && ms > 0)
+                                    s += " • " + ms + " ms"
+                                return s
+                            }
                             color: Theme.surfaceText
                             font.pixelSize: Theme.fontSizeSmall
                             elide: Text.ElideRight

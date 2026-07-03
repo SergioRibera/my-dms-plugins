@@ -144,6 +144,7 @@ Singleton {
                                 caps: get("Capabilities") || [],
                                 battery: get("BatteryLevel") || 0,
                                 address: get("Address") || "",
+                                latencyMs: get("LatencyMs") || 0,
                                 live: svc.isLive(state),
                                 pending: svc.isPending(state)
                             })
@@ -151,13 +152,28 @@ Singleton {
                             svc.lastError = "GetAll parse " + captureId + ": " + e
                             next.push({id: captureId, name: captureId.substring(0,8),
                                        state: "disconnected", caps: [], battery: 0,
-                                       address: "", live: false, pending: false})
+                                       address: "", latencyMs: 0,
+                                       live: false, pending: false})
                         }
                     }
                     if (--pending === 0) {
                         svc.devices = next.sort((a, b) => a.name.localeCompare(b.name))
                     }
                 }, 0)
+        }
+    }
+
+    /** Patch `latencyMs` for one device in-place without re-fetching
+     *  all properties. Driven by `LatencyMs` PropertiesChanged signals
+     *  from the daemon's heartbeat loop (fires every ~5 s). */
+    function _patchLatency(id, ms) {
+        const next = svc.devices.slice()
+        for (let i = 0; i < next.length; ++i) {
+            if (next[i].id === id) {
+                next[i] = Object.assign({}, next[i], { latencyMs: ms })
+                svc.devices = next
+                return
+            }
         }
     }
 
@@ -474,11 +490,21 @@ Singleton {
         /(\/org\/gameros\/Ansync1\/Pair\/[^:]+):\s+org\.gameros\.Ansync1\.PairingSession\.Completed\s*\('([^']+)',\s*'([^']*)'\)/
     readonly property var _pairFailedRe:
         /(\/org\/gameros\/Ansync1\/Pair\/[^:]+):\s+org\.gameros\.Ansync1\.PairingSession\.Failed\s*\('([^']*)'\)/
+    // Matches PropertiesChanged on a Device object carrying LatencyMs.
+    // gdbus renders the changed-properties dict as:
+    //   /…/Device/ID: …PropertiesChanged ('org.gameros.Ansync1.Device', {'LatencyMs': <uint32 42>}, …)
+    readonly property var _latencyRe:
+        /\/org\/gameros\/Ansync1\/Device\/([^:]+):\s+org\.freedesktop\.DBus\.Properties\.PropertiesChanged.*'LatencyMs':\s*<uint32\s+(\d+)>/
 
     function _onMonitorLine(line) {
         const c = line.match(svc._connRe)
         if (c) {
             svc._patchState(c[1], c[2])
+            return
+        }
+        const lat = line.match(svc._latencyRe)
+        if (lat) {
+            svc._patchLatency(lat[1], parseInt(lat[2], 10))
             return
         }
         const sr = line.match(svc._streamRe)

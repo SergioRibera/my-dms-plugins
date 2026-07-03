@@ -1,8 +1,8 @@
 {
     "id": "ansync",
     "name": "Ansync",
-    "description": "Android companion: state, PC audio route, clipboard, files.",
-    "version": "0.3.0",
+    "description": "Android companion: state, latency, PC audio route, clipboard, files.",
+    "version": "0.4.0",
     "author": "Sergio Ribera",
     "type": "widget",
     "capabilities": ["dankbar-widget", "control-center", "android-mirror"],
